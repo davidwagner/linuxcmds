@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Shell-history files downloaded from public bug trackers (local data, not for the repo)
+downloaded/
