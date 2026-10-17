@@ -1,0 +1,39 @@
+I have tested with 5.2.0, it seems to work.
+
+I have the hardware
+(Atlys shown here:
+https://hdmi2usb.tv/digilent-atlys/
+and sometimes
+https://store.digilentinc.com/atlys-spartan-6-fpga-trainer-board-limited-time-see-nexys-video/
+
+Are there any issues blocking this?
+
+Here is from my bash_history:
+
+mkdir shenki torvalds
+(cd shenki
+git clone https://github.com/shenki/linux.git
+cd linux
+git diff HEAD^ > ../../vizzini.patch
+)
+cd torvalds
+git clone -depth 1
+git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+cd linux
+cp /boot/config-`uname -r` .config
+yes '' | make oldconfig
+make -j `getconf _NPROCESSORS_ONLN` deb-pkg LOCALVERSION=-viz-torv
+git apply ../../vizzini.patch
+make oldconfig
+# USB Exar XR21V141x 'Vizzini' Serial Driver (USB_SERIAL_VIZZINI)
+[N/m/?] (NEW) m
+make -j `getconf _NPROCESSORS_ONLN` deb-pkg LOCALVERSION=-viz2-torv
+cd ..
+sudo dpkg -i linux-image-5.2.0-rc1-viz2-torv_5.2.0-rc1-viz2-torv-1_amd64.deb
+
+
+
+
+-- 
+Carl K
+

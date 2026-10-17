@@ -1,0 +1,66 @@
+Hi again,
+
+Carl Fürstenberg wrote:
+
+> I was doing some experiment, trying to create an empty branch with two
+> submodules, and apply an branch upon them (a git svn conversion
+> history).
+>
+> When the rebase is almost done, I've gotten an segfault for git apply
+> via git-am.
+
+Alas, I can't reproduce this.  I tried the following:
+
+-- 8< --
+git svn clone \
+ http://svn.wikimedia.org/svnroot/mediawiki/trunk/extensions/UploadWizard/resources \
+	--no-metadata --no-follow-parent -r 70924:HEAD test
+cd test
+git filter-branch --prune-empty \
+	--index-filter '
+		git rm --cached --ignore-unmatch \*.png &&
+		git rm --cached --ignore-unmatch 24p\*.gif &&
+		git rm --cached -r --ignore-unmatch jquery\*
+	' HEAD
+git checkout --orphan work
+git rm -fr .
+git submodule add https://github.com/jquery/jquery.git jquery
+git submodule add https://github.com/jquery/jquery-ui.git jquery.ui
+git commit -m 'add submodules'
+git rebase --onto work work master
+-- >8 --
+
+and it worked fine.  Everything rebased cleanly (both with the amd64
+build of 1.7.4.1-1 from sid and a local i386 rebuild).
+
+So I wonder:
+
+ - does "git config -l" show anything interesting?
+ - would you be willing to build a copy of git with debugging
+   symbols[1] and get a backtrace?
+ - does the above script break for you?  If not (or if so), any
+   idea what I am doing wrong?
+
+Other ideas would be welcome, too.
+
+Regards,
+Jonathan
+
+[1] The Debian way:
+
+  apt-get build-dep git
+  apt-get source git
+  cd git-*
+  DEB_BUILD_OPTIONS=nostrip dpkg-buildpackage -rfakeroot
+  ... wait a long time for manpages to be built ...
+
+Or the upstream way:
+
+  git clone git://repo.or.cz/git.git
+  cd git
+  make -j2 NO_CURL=YesPlease NO_EXPAT=YesPlease NO_OPENSSL=YesPlease
+  cd $test_directory
+  ~/src/git/bin-wrappers/git rebase --onto work work master
+  gdb ~/src/git/git core
+
+
