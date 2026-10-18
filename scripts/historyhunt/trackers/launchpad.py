@@ -2,22 +2,21 @@
 
 Launchpad has no attachment-filename search, so bugs are found with the
 full-text ``searchTasks`` operation on the Ubuntu project and every
-attachment of each matching bug is considered: kept when the name says
-shell history, content-sniffed otherwise (attachment titles on Launchpad
-are user-chosen and often generic).
+attachment of each matching bug is considered: kept when the name matches
+the hunt profile, content-sniffed otherwise (attachment titles on
+Launchpad are user-chosen and often generic).
 """
 
 import re
 import urllib.parse
 
-from ..common import SPECIFIC_PATTERNS, Candidate, FetchError, Progress
-from ..detect import is_history_filename
+from ..common import Candidate, FetchError, Progress
 
 API = "https://api.launchpad.net/1.0"
 
 
 class LaunchpadTracker:
-    """Search Ubuntu's Launchpad bugs for shell history attachments."""
+    """Search Ubuntu's Launchpad bugs for profile-matching attachments."""
 
     def __init__(self, config, http, state, name="ubuntu"):
         """Store shared config, HTTP client and crawl state."""
@@ -55,9 +54,9 @@ class LaunchpadTracker:
         return entries
 
     def find(self):
-        """Yield Candidates for history attachments on Launchpad."""
+        """Yield Candidates for profile-matching attachments on Launchpad."""
         bugs = set()
-        for pattern in SPECIFIC_PATTERNS:
+        for pattern in self.cfg.profile.text_patterns:
             try:
                 bugs.update(self._search_bug_ids(pattern))
             except FetchError as exc:
@@ -90,7 +89,7 @@ class LaunchpadTracker:
                     )
                     if not cand.url:
                         continue
-                    if is_history_filename(title):
+                    if self.cfg.profile.is_target_filename(title):
                         yield cand
                     else:
                         # Launchpad attachment titles are unreliable, so every

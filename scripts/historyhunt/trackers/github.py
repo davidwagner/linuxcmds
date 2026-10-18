@@ -3,10 +3,11 @@
 GitHub issue search covers issue bodies and comments.  Files dragged into a
 GitHub issue keep their original name in the link
 (``https://github.com/user-attachments/files/<id>/<name>``, or the older
-``https://github.com/<org>/<repo>/files/<id>/<name>``), so history files can
-be found by searching for history keywords and then extracting upload links
-from the issue body and every comment.  Old-style ``cloud.githubusercontent``
-asset links carry no filename; those are content-sniffed.
+``https://github.com/<org>/<repo>/files/<id>/<name>``), so wanted files can
+be found by searching for the profile's terms and then extracting upload
+links from the issue body and every comment.  Old-style
+``cloud.githubusercontent`` asset links carry no filename; those are
+content-sniffed.
 
 Unauthenticated rate limits are low (10 search requests/min, 60 API
 requests/hour).  Setting the GITHUB_TOKEN environment variable raises them.
@@ -17,8 +18,7 @@ import json
 import re
 import urllib.parse
 
-from ..common import SPECIFIC_PATTERNS, Candidate, FetchError, Progress
-from ..detect import is_generic_history_name, is_history_filename
+from ..common import Candidate, FetchError, Progress
 
 ORG = "linuxmint"
 API = "https://api.github.com"
@@ -37,7 +37,7 @@ _ASSET_RE = re.compile(
 
 
 class GitHubTracker:
-    """Search Linux Mint's GitHub issues for attached shell history files."""
+    """Search Linux Mint's GitHub issues for profile-matching files."""
 
     def __init__(self, config, http, state, name="mint"):
         """Store shared config, HTTP client and crawl state."""
@@ -93,9 +93,9 @@ class GitHubTracker:
             yield digest, "", match.group(0), True
 
     def find(self):
-        """Yield Candidates for history files attached to Mint issues."""
+        """Yield Candidates for profile-matching files on Mint issues."""
         issues = {}
-        for pattern in SPECIFIC_PATTERNS:
+        for pattern in self.cfg.profile.text_patterns:
             try:
                 for item in self._search_issues(pattern):
                     issues[item["html_url"]] = item
@@ -124,8 +124,10 @@ class GitHubTracker:
                         if url in seen:
                             continue
                         seen.add(url)
-                        named_hit = bool(name) and is_history_filename(name)
-                        sniff = forced_sniff or is_generic_history_name(name)
+                        named_hit = bool(name) and self.cfg.profile.is_target_filename(
+                            name
+                        )
+                        sniff = forced_sniff or self.cfg.profile.is_generic_name(name)
                         if not named_hit and not sniff:
                             continue
                         yield Candidate(

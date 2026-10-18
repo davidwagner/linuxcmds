@@ -1,7 +1,8 @@
 """Bug tracker adapters.
 
 Each tracker yields :class:`historyhunt.common.Candidate` objects for
-attachments that are (by name) or might be (by content) shell history files.
+attachments that are (by name) or might be (by content) the kind of file
+the active hunt profile looks for.
 """
 
 from .bugzilla import BugzillaTracker
@@ -11,31 +12,38 @@ from .gitlab import GitLabTracker
 from .launchpad import LaunchpadTracker
 from .mantis import MantisTracker
 
+# Bugzilla instances: tracker key -> site root (REST API at <root>/rest.cgi).
 BUGZILLA_INSTANCES = {
-    # Red Hat's Bugzilla carries RHEL, Fedora and CentOS Stream reports.
     "redhat": "https://bugzilla.redhat.com",
-    # SUSE's Bugzilla carries SLES and openSUSE reports.
     "suse": "https://bugzilla.suse.com",
     "gentoo": "https://bugs.gentoo.org",
 }
 
-TRACKER_NAMES = list(BUGZILLA_INSTANCES) + [
-    "ubuntu",
-    "debian",
-    "arch",
-    "mint",
-    "almalinux",
-]
+# GitLab instances: tracker key -> (site root, group whose issues, including
+# subgroups, are searched).
+GITLAB_INSTANCES = {
+    "arch": ("https://gitlab.archlinux.org", "archlinux"),
+    "alpine": ("https://gitlab.alpinelinux.org", "alpine"),
+}
+
+TRACKER_NAMES = (
+    list(BUGZILLA_INSTANCES)
+    + ["ubuntu", "debian"]
+    + list(GITLAB_INSTANCES)
+    + ["mint", "almalinux"]
+)
 
 
 def build_tracker(name, config, http, state):
-    """Create the tracker adapter called *name* (see TRACKER_NAMES)."""
+    """Create the adapter for tracker *name*."""
     if name in BUGZILLA_INSTANCES:
         return BugzillaTracker(name, BUGZILLA_INSTANCES[name], config, http, state)
+    if name in GITLAB_INSTANCES:
+        base, group = GITLAB_INSTANCES[name]
+        return GitLabTracker(config, http, state, name, base, group)
     factories = {
         "ubuntu": LaunchpadTracker,
         "debian": DebianTracker,
-        "arch": GitLabTracker,
         "mint": GitHubTracker,
         "almalinux": MantisTracker,
     }

@@ -10,8 +10,7 @@ The tracker is small (hundreds of issues), so this is cheap.
 import re
 import urllib.parse
 
-from ..common import SPECIFIC_PATTERNS, Candidate, FetchError, Progress
-from ..detect import is_generic_history_name, is_history_filename
+from ..common import Candidate, FetchError, Progress
 
 BASE = "https://bugs.almalinux.org"
 
@@ -22,7 +21,7 @@ _ATTACHMENT_RE = re.compile(
 
 
 class MantisTracker:
-    """Search AlmaLinux's MantisBT for attached shell history files."""
+    """Search AlmaLinux's MantisBT for profile-matching attachments."""
 
     def __init__(self, config, http, state, name="almalinux"):
         """Store shared config, HTTP client and crawl state."""
@@ -45,9 +44,9 @@ class MantisTracker:
         return _ATTACHMENT_RE.findall(body)
 
     def find(self):
-        """Yield Candidates for history attachments on AlmaLinux's tracker."""
+        """Yield Candidates for profile-matching attachments on AlmaLinux."""
         issues = set()
-        for pattern in SPECIFIC_PATTERNS:
+        for pattern in self.cfg.profile.text_patterns:
             try:
                 issues.update(self._search_issue_ids(pattern))
             except FetchError as exc:
@@ -69,10 +68,8 @@ class MantisTracker:
                     continue
                 for file_id, filename in attachments:
                     filename = filename.strip()
-                    named_hit = is_history_filename(filename)
-                    sniff = is_generic_history_name(filename) or not named_hit
-                    if named_hit:
-                        sniff = False
+                    named_hit = self.cfg.profile.is_target_filename(filename)
+                    sniff = not named_hit
                     # Every attachment of a matching issue is considered,
                     # because uploads often carry generic names.
                     yield Candidate(

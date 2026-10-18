@@ -17,6 +17,22 @@ style used by csh/tcsh/ksh.
 import gzip
 import re
 
+from .common import Profile
+
+# Patterns used for filename/keyword searches.  Deliberately dot-free:
+# leading-dot substrings match nothing in Bugzilla's search.
+SPECIFIC_PATTERNS = [
+    "bash_history",
+    "zsh_history",
+    "fish_history",
+    "histfile",
+    "zhistory",
+    "sh_history",
+    "shell_history",
+]
+
+BROAD_PATTERNS = ["history"]
+
 # Suffixes people commonly append when uploading a history file.
 _SUFFIX_RE = re.compile(
     r"(?:\.(?:txt|text|log|out|gz|bz2|xz|zip|zst|old|bak|orig|save|sav|swp"
@@ -196,6 +212,21 @@ def classify_history(data):
     if _looks_like_shell_lines(lines):
         return "sh"
     return None
+
+
+def history_profile():
+    """Build the shell-history hunting profile for the shared machinery."""
+    return Profile(
+        name="history",
+        state_filename=".hunt_state.json",
+        manifest_filename="manifest.jsonl",
+        filename_patterns=SPECIFIC_PATTERNS,
+        broad_patterns=BROAD_PATTERNS,
+        text_patterns=SPECIFIC_PATTERNS,
+        is_target_filename=is_history_filename,
+        is_generic_name=is_generic_history_name,
+        classify=classify_history,
+    )
 
 
 if __name__ == "__main__":

@@ -3,10 +3,10 @@
 debbugs has no way to search message bodies or attachments itself, so
 candidate bugs are discovered through The Mail Archive, which indexes the
 ``debian-bugs-dist`` mailing list (a mirror of all bug traffic): searching
-it for a history keyword returns messages whose subjects contain
+it for a profile search term returns messages whose subjects contain
 ``Bug#<number>``.  For each candidate bug the whole report is downloaded as
 an mbox (``bugreport.cgi?mbox=yes&bug=<n>``) and every MIME part is
-inspected: parts with history filenames are kept, plain-text parts are
+inspected: parts with matching filenames are kept, plain-text parts are
 content-sniffed.  Because debbugs attachments are just MIME parts of bug
 mail, parts frequently have no filename at all — the content sniffing is
 what finds those.
@@ -19,8 +19,7 @@ import tempfile
 import time
 import urllib.parse
 
-from ..common import SPECIFIC_PATTERNS, Candidate, FetchError, Progress
-from ..detect import is_history_filename
+from ..common import Candidate, FetchError, Progress
 
 SEARCH_URL = "https://www.mail-archive.com/search"
 BUG_URL = "https://bugs.debian.org/cgi-bin/bugreport.cgi"
@@ -33,7 +32,7 @@ _TEXT_TYPES = {"text/plain", "application/octet-stream", "text/x-sh", ""}
 
 
 class DebianTracker:
-    """Search Debian's BTS for attached shell history files."""
+    """Search Debian's BTS for profile-matching attached files."""
 
     def __init__(self, config, http, state, name="debian"):
         """Store shared config, HTTP client and crawl state."""
@@ -77,7 +76,9 @@ class DebianTracker:
                         continue
                     if len(payload) > self.cfg.sniff_size:
                         continue
-                    named_hit = bool(filename) and is_history_filename(filename)
+                    named_hit = bool(filename) and self.cfg.profile.is_target_filename(
+                        filename
+                    )
                     ctype = part.get_content_type()
                     if not named_hit and ctype not in _TEXT_TYPES:
                         continue
@@ -95,9 +96,9 @@ class DebianTracker:
             os.unlink(tmp_path)
 
     def find(self):
-        """Yield Candidates for history files attached to Debian bugs."""
+        """Yield Candidates for profile-matching files on Debian bugs."""
         bug_ids = set()
-        for pattern in SPECIFIC_PATTERNS:
+        for pattern in self.cfg.profile.text_patterns:
             bug_ids.update(self._search_bug_ids(pattern))
             time.sleep(2)
         bug_ids = sorted(bug_ids)

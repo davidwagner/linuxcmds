@@ -3,20 +3,23 @@
 Bugzilla's REST API supports the same "advanced search" as the web UI, so
 ``f1=attachments.filename&o1=substring&v1=<pattern>`` finds bugs whose
 attachments have matching names.  Bugs found that way only need their
-history-named or history-ish attachments inspected.  With comment search
-enabled, bugs whose discussion mentions history files are also scanned, and
-then *all* their small text attachments are content-sniffed — that catches
-files uploaded under generic names like ``output.txt``.
+matching or generically named attachments inspected.  With comment search
+enabled, bugs whose discussion mentions the wanted files are also scanned,
+and then *all* their small text attachments are content-sniffed — that
+catches files uploaded under generic names like ``output.txt``.
+
+Which patterns are searched and which filenames count as targets comes
+from the hunt profile (``cfg.profile``), so this one adapter serves both
+the shell-history hunt and the audit/auth/journald log hunt.
 """
 
 import urllib.parse
 
-from ..common import BROAD_PATTERNS, SPECIFIC_PATTERNS, Candidate, Progress
-from ..detect import is_generic_history_name, is_history_filename
+from ..common import Candidate, Progress
 
 
 class BugzillaTracker:
-    """Search one Bugzilla instance for shell history attachments."""
+    """Search one Bugzilla instance for attachments matching the profile."""
 
     def __init__(self, name, base_url, config, http, state):
         """*name* is the tracker key (e.g. "redhat"), *base_url* the site root
@@ -67,12 +70,13 @@ class BugzillaTracker:
         return data.get("bugs", {}).get(str(bug_id), [])
 
     def find(self):
-        """Yield Candidates for history attachments on this Bugzilla."""
+        """Yield Candidates for profile-matching attachments here."""
+        profile = self.cfg.profile
         # bug id -> True when every small text attachment should be sniffed
         bugs = {}
-        patterns = list(SPECIFIC_PATTERNS)
+        patterns = list(profile.filename_patterns)
         if self.cfg.broad:
-            patterns += BROAD_PATTERNS
+            patterns += profile.broad_patterns
         for pattern in patterns:
             try:
                 for bug_id in self._search("attachments.filename", pattern):
@@ -80,13 +84,16 @@ class BugzillaTracker:
             except Exception as exc:
                 print(f"[{self.name}] search failed for {pattern!r}: {exc!r}")
         if self.cfg.comments_search:
-            for pattern in SPECIFIC_PATTERNS:
+            for pattern in profile.text_patterns:
                 try:
                     for bug_id in self._search("longdesc", pattern):
                         bugs.setdefault(bug_id, True)
                 except Exception as exc:
                     print(f"[{self.name}] comment search failed: {exc!r}")
-        bug_ids = sorted(bugs)
+        # Newest bugs first: recent attachments are more relevant (modern
+        # audit.log files contain EXECVE records; pre-2007 ones usually
+        # only have AVC/DAEMON records).
+        bug_ids = sorted(bugs, reverse=True)
         if self.cfg.max_bugs:
             bug_ids = bug_ids[: self.cfg.max_bugs]
         progress = Progress(f"[{self.name}]", len(bug_ids))
@@ -119,10 +126,10 @@ class BugzillaTracker:
                         issue_url=f"{self.base}/show_bug.cgi?id={bug_id}",
                         extra={"rest_b64": True, "headers": self.headers},
                     )
-                    if is_history_filename(filename):
+                    if profile.is_target_filename(filename):
                         yield cand
                     elif (
-                        is_generic_history_name(filename)
+                        profile.is_generic_name(filename)
                         or (sniff_all and att.get("content_type", "").startswith("text/"))
                     ) and att.get("size", 0) <= self.cfg.sniff_size:
                         cand.sniff = True

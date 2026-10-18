@@ -2,6 +2,12 @@
 
 Everything here is standard-library only so the scripts run on any machine
 with Python 3.9+ and no packages to install.
+
+What a hunt looks for (search patterns, filename tests, content classifier)
+is kept separate from how trackers are searched: a :class:`Profile` bundles
+the former and is handed to every tracker through :class:`Config`.  The
+profiles live in ``historyhunt.detect`` (shell history) and
+``historyhunt.detect_logs`` (audit/auth/journald logs).
 """
 
 import json
@@ -12,8 +18,9 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
+from typing import Callable, List, Optional
 
-USER_AGENT = "historyhunt/1.0 (shell-history research; stdlib urllib)"
+USER_AGENT = "kiss-linuxcmds/1.0 (public bug-tracker research; stdlib urllib)"
 
 
 class FetchError(Exception):
@@ -292,11 +299,11 @@ def download_to(http, url, dest, max_size):
 
 @dataclass
 class Candidate:
-    """One attachment that might be a shell history file.
+    """One attachment that might be a file the hunt is looking for.
 
     When *sniff* is True the filename is generic or missing and the content
     must be classified before keeping the file; False means the filename
-    already identifies it as a shell history file.
+    already identifies it as wanted.
     """
 
     tracker: str
@@ -311,12 +318,40 @@ class Candidate:
 
 
 @dataclass
+class Profile:
+    """What one hunt looks for: search patterns, filename tests, classifier.
+
+    - *filename_patterns*: substrings for Bugzilla's attachment-filename
+      search (high precision).
+    - *broad_patterns*: noisier substrings for the same search, skipped
+      with ``--no-broad``.
+    - *text_patterns*: search terms for trackers that only offer full-text
+      search (Launchpad, GitHub, GitLab, Mantis, the Debian mail archive).
+    - *is_target_filename*: filename alone identifies a wanted file.
+    - *is_generic_name*: filename is ambiguous; keep only if *classify*
+      recognizes the content.
+    - *classify*: bytes -> short label ("audit", "syslog", ...) or None.
+    """
+
+    name: str
+    state_filename: str
+    manifest_filename: str
+    filename_patterns: List[str]
+    broad_patterns: List[str]
+    text_patterns: List[str]
+    is_target_filename: Callable[[str], bool]
+    is_generic_name: Callable[[str], bool]
+    classify: Callable[[bytes], Optional[str]]
+
+
+@dataclass
 class Config:
     """Run configuration shared by all trackers."""
 
     out_dir: str
+    profile: Profile
     max_bugs: int = 0  # 0 = unlimited
-    broad: bool = True  # also search the catch-all "history" pattern
+    broad: bool = True  # also search the profile's broad patterns
     comments_search: bool = False  # also search issue text/comments
     delay: float = 0.3
     max_size: int = 50 * 1024 * 1024
@@ -326,18 +361,3 @@ class Config:
     github_token: str = ""
     # Bugzilla instance name -> API key (sent as Authorization: Bearer).
     bugzilla_api_keys: dict = field(default_factory=dict)
-
-
-# Patterns used for filename/keyword searches.  Deliberately dot-free:
-# leading-dot substrings match nothing in Bugzilla's search.
-SPECIFIC_PATTERNS = [
-    "bash_history",
-    "zsh_history",
-    "fish_history",
-    "histfile",
-    "zhistory",
-    "sh_history",
-    "shell_history",
-]
-
-BROAD_PATTERNS = ["history"]
